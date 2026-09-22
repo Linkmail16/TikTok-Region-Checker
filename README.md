@@ -6,7 +6,7 @@ Unofficial Omar-Thing API to view profile info along with the account region
 Run the script followed by the username you want to check:
 
 ```bash
-python profileInfo.py linkmail1```
+python profileInfo.py linkmail1
 ```
 ## Example Output
 
