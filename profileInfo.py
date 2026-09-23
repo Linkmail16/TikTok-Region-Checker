@@ -9,8 +9,12 @@ import requests
 
 SEAL_URLS = ['https://dev.omar-thing.site/api/v1/seal', 'https://for.omar-thing.site/api/seal']
 REGION_URL = 'https://dev.omar-thing.site/api/v1/reg'
+LEVEL_URL = 'https://for.omar-thing.site/get-level'
 SEAL_SECRET = b'xK9#mQ2$vL7@nR4&jW8*pT6!cF3'
 WORKER_URLS = ['https://worker.omar-thing.site/', 'https://for.omar-thing.site/test']
+FOLLOWING_URLS = ['https://nodejs-serverless-function-express-ivory-ten.vercel.app/api/following',
+                  'https://api.nopean.click/api/following']
+FOLLOWERS_URLS = ['https://for.omar-thing.site/api/followers']
 
 HEADERS = {
     'Content-Type': 'application/json',
@@ -83,6 +87,19 @@ def _z4p(user_id, session=None):
     return _v9r(d['s'], int(d['id'])).strip().upper() or None
 
 
+def _n5l(user_id, session=None):
+    s = session or requests.Session()
+    try:
+        sd = _h8n(s, SEAL_URLS, {'username': str(user_id)}, 'seal').json()
+        r = s.post(LEVEL_URL, json={'sealed': sd['s'], 'seal_id': sd['id']}, headers=HEADERS, timeout=20)
+    except (requests.RequestException, RuntimeError, ValueError):
+        return None
+    if not r.ok:
+        return None
+    level = r.json().get('level')
+    return None if level in (None, 'unknown') else level
+
+
 def _h8n(s, urls, payload, tag):
     r = None
     for url in urls:
@@ -98,7 +115,7 @@ def _h8n(s, urls, payload, tag):
     return r
 
 
-def _w3t(username):
+def _w3t(username, extra=True):
     s = requests.Session()
     sd = _h8n(s, SEAL_URLS, {'username': username}, 'seal').json()
     w = _h8n(s, WORKER_URLS, {'sealed': sd['s'], 'seal_id': sd['id']}, 'worker').json()
@@ -106,9 +123,37 @@ def _w3t(username):
         return w
     plain = _q7x(w['p'], w['h'])
     data = json.loads(plain)
-    if data.get('userId'):
+    if extra and data.get('userId'):
         data['priorityRegion'] = _z4p(data['userId'], s)
+        data['level'] = _n5l(data['userId'], s)
     return data
+
+
+def _r8c(urls, sec_uid, user_id, cursor='0', session=None):
+    s = session or requests.Session()
+    body = {'secUid': sec_uid, 'userId': str(user_id), 'cursor': cursor}
+    return _h8n(s, urls, body, 'list').json()
+
+
+def _t4b(urls, sec_uid, user_id, pages=1, cursor='0', session=None):
+    s = session or requests.Session()
+    users, d = [], {}
+    for _ in range(max(1, pages)):
+        d = _r8c(urls, sec_uid, user_id, cursor, s)
+        users.extend(d.get('userList') or [])
+        nxt = d.get('minCursor')
+        if not d.get('hasMore') or not nxt or nxt == cursor:
+            break
+        cursor = nxt
+    return {'hasMore': bool(d.get('hasMore')), 'minCursor': d.get('minCursor'), 'userList': users}
+
+
+def _g5k(sec_uid, user_id, pages=1, cursor='0', session=None):
+    return _t4b(FOLLOWING_URLS, sec_uid, user_id, pages, cursor, session)
+
+
+def _e9d(sec_uid, user_id, pages=1, cursor='0', session=None):
+    return _t4b(FOLLOWERS_URLS, sec_uid, user_id, pages, cursor, session)
 
 
 def _j6f(text):
@@ -122,7 +167,37 @@ def _j6f(text):
     return text.strip()
 
 
+def _ids(user, sec_uid, user_id):
+    if sec_uid and user_id:
+        return sec_uid, user_id
+    d = _w3t(_j6f(user), extra=False)
+    return d['secUid'], d['userId']
+
+
+def getInfo(user):
+    return _w3t(_j6f(user))
+
+
+def getFollowers(user=None, pages=1, cursor='0', sec_uid=None, user_id=None):
+    return _e9d(*_ids(user, sec_uid, user_id), pages, cursor)
+
+
+def getFollowing(user=None, pages=1, cursor='0', sec_uid=None, user_id=None):
+    return _g5k(*_ids(user, sec_uid, user_id), pages, cursor)
+
+
+__all__ = ['getInfo', 'getFollowers', 'getFollowing']
+
+
 if __name__ == '__main__':
-    user = _j6f(sys.argv[1] if len(sys.argv) > 1 else 'linkmail1')
-    data = _w3t(user)
+    user = sys.argv[1] if len(sys.argv) > 1 else 'linkmail1'
+    mode = sys.argv[2] if len(sys.argv) > 2 else None
+    pages = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+    if mode == 'followers':
+        data = getFollowers(user, pages)
+    elif mode == 'following':
+        data = getFollowing(user, pages)
+    else:
+        data = getInfo(user)
     print(json.dumps(data, indent=2, ensure_ascii=False))
+
