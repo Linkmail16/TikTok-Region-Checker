@@ -92,7 +92,6 @@ fs = getFollowers(sec_uid=info['secUid'], user_id=info['userId'], pages=3)
       }
     },
       ...
-    }
   ]
 }
 ```
